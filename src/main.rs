@@ -128,12 +128,24 @@ async fn main() {
                     assets = assets.small_text(&small_text)
                 }
 
+                let mut buttons: Vec<activity::Button> = vec![];
+
+                let mut release_str: String = String::new();
+                if let Some(release) = album_art_client.get_album_release_url(song.clone()) {
+                    release_str = release;
+                };
+
+                if !release_str.is_empty() {
+                    buttons.push(activity::Button::new("MusicBrainz", &release_str));
+                }
+
                 let res = drpc.set_activity(
                     activity::Activity::new()
                         .state(&state)
                         .details(&details)
                         .assets(assets)
-                        .timestamps(timestamps),
+                        .timestamps(timestamps)
+                        .buttons(buttons),
                 );
 
                 if let Err(why) = res {

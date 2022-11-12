@@ -97,4 +97,29 @@ impl AlbumArtClient {
 
         mb_album_id.map(|id| format!("https://coverartarchive.org/release/{}/front-250", id))
     }
+
+    /// Attempts to get the URL to the current album's MusicBrainz page
+    /// by fetching it from MusicBrainz.
+    ///
+    /// Uses MPD's internal MusicBrainz album ID tag if its set,
+    /// otherwise falls back to searching.
+    pub fn get_album_release_url(&mut self, song: Song) -> Option<String> {
+        let mb_album_id = match try_get_first_tag(song.tags.get(&Tag::MusicBrainzReleaseId)) {
+            Some(id) => Some(id.to_string()),
+            None => {
+                let tags = song.tags;
+                let artist = try_get_first_tag(tags.get(&Tag::Artist));
+                let album = try_get_first_tag(tags.get(&Tag::Album));
+
+                match (artist, album) {
+                    (Some(artist), Some(album)) => {
+                        self.find_release(artist.to_string(), album.to_string())
+                    }
+                    _ => None,
+                }
+            }
+        };
+
+        mb_album_id.map(|id| format!("https://musicbrainz.org/release/{}", id))
+    }
 }
