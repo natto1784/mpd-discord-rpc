@@ -1,6 +1,7 @@
 use std::{thread, time};
 
-use discord_rpc_client::Client as DiscordClient;
+use discord_rich_presence::activity;
+use discord_rich_presence::{DiscordIpc, DiscordIpcClient as DiscordClient};
 use mpd_client::commands::responses::{PlayState, Song};
 use mpd_client::{commands, Client as MPDClient};
 use regex::Regex;
@@ -67,11 +68,19 @@ async fn main() {
 
     // MPD and Discord connections
     let mut mpd = idle(hosts).await;
-    let mut drpc = DiscordClient::new(id);
+    let drpc_w = DiscordClient::new(&id.to_string());
+
+    if let Err(ref why) = drpc_w {
+        eprintln!("Failed to create a new client: {}", why);
+    };
+
+    let mut drpc = drpc_w.unwrap();
+
+    if let Err(why) = drpc.connect() {
+        eprintln!("Failed to connect the client {}", why);
+    };
 
     let mut album_art_client = AlbumArtClient::new();
-
-    drpc.start();
 
     // Main program loop - keep updating state until exit
     loop {
@@ -92,35 +101,40 @@ async fn main() {
 
                 let timestamps = get_timestamp(&mut mpd, timestamp_mode).await;
 
-                let res = drpc.set_activity(|act| {
-                    act.state(state)
-                        .details(details)
-                        .assets(|mut assets| {
-                            // Attempt to fetch art from MusicBrainz
-                            // fall back to configured image
-                            let url = album_art_client.get_album_art_url(song);
-                            match url {
-                                Some(url) => assets = assets.large_image(&url),
-                                None => {
-                                    if !large_image.is_empty() {
-                                        assets = assets.large_image(large_image)
-                                    }
-                                }
-                            };
+                let mut assets = activity::Assets::new();
 
-                            if !small_image.is_empty() {
-                                assets = assets.small_image(small_image)
-                            }
-                            if !large_text.is_empty() {
-                                assets = assets.large_text(large_text)
-                            }
-                            if !small_text.is_empty() {
-                                assets = assets.small_text(small_text)
-                            }
-                            assets
-                        })
-                        .timestamps(|_| timestamps)
-                });
+                let mut large_image_str: String = String::new();
+
+                let url = album_art_client.get_album_art_url(song.clone());
+                match url {
+                    Some(url) => large_image_str = url,
+                    None => {
+                        if !large_image.is_empty() {
+                            large_image_str = large_image.to_owned();
+                        }
+                    }
+                };
+
+                if !large_image_str.is_empty() {
+                    assets = assets.large_image(&large_image_str);
+                }
+                if !small_image.is_empty() {
+                    assets = assets.small_image(small_image)
+                }
+                if !large_text.is_empty() {
+                    assets = assets.large_text(&large_text)
+                }
+                if !small_text.is_empty() {
+                    assets = assets.small_text(&small_text)
+                }
+
+                let res = drpc.set_activity(
+                    activity::Activity::new()
+                        .state(&state)
+                        .details(&details)
+                        .assets(assets)
+                        .timestamps(timestamps),
+                );
 
                 if let Err(why) = res {
                     eprintln!("Failed to set activity: {}", why);

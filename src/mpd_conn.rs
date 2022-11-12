@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::net::{TcpStream, UnixStream};
 
-use discord_rpc_client::models::ActivityTimestamps;
+use discord_rich_presence::activity::Timestamps as ActivityTimestamps;
 use mpd_client::commands::responses::{PlayState, Song, Status};
 use mpd_client::raw::MpdProtocolError;
 use mpd_client::{commands, Client as MPDClient, Connection, Tag};
@@ -102,10 +102,10 @@ pub(crate) async fn get_timestamp(client: &mut MPDClient, mode: &str) -> Activit
             let duration = get_duration(&status);
 
             let remaining = duration - elapsed;
-            timestamps.end(current_time + remaining as u64)
+            timestamps.end((current_time + remaining) as i64)
         }
         "off" => timestamps,
-        _ => timestamps.start(current_time - elapsed as u64),
+        _ => timestamps.start((current_time - elapsed) as i64),
     }
 }
 
